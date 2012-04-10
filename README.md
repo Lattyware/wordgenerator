@@ -30,6 +30,7 @@ this is highly reccomended.
 
 For usage as a command line application, see the below explanation of arguments:
 
+```
 usage: wordgenerator.py [-h] [-w BOOL] [-n N] [--min N] [-m N] [-s FILE] [-o]
                         [-l FILE] [--version]
                         [FILE]
@@ -54,6 +55,7 @@ optional arguments:
                         output.
   -l FILE, --load FILE  Load the library from JSON data on disc.
   --version             show program's version number and exit
+```
 
 ### As a library:
 
