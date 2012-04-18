@@ -31,7 +31,7 @@ import sys
 import json
 import itertools
 
-class EmptyDictionaryError(Exception):
+class NotSeededError(Exception):
 	def __str__(self):
 		return "Before generating words, the word generator must be seeded " \
 		       "with values from a language."
@@ -83,35 +83,50 @@ class WordGenerator:
 		               this can be used to make amalgamation languages. If
 		               false, replaces the current library with the new one.
 		"""
-		self.vowels = vowels
-		self.vowels.add(WordGenerator.MARKER)
-		self.regex = re.compile("([%]+)([^%]+)(?=([%]+))".replace("%", "".join(self.vowels)))
-		if not append:
-			self.components = collections.defaultdict(collections.Counter)
-			self.starts = collections.Counter()
 		if dictionary and not language:
 			try:
 				with open(dictionary, "r") as file:
 					self.seed(language=file)
 			except TypeError:
-				self.seed(language=dictionary)
+				self._seed(language=dictionary)
 		elif language and not dictionary:
-			for key, value in itertools.chain.from_iterable(
-				(self.split_word(word) for word in
-					(item.strip().lower() for item in language if item))):
-				if key.startswith(WordGenerator.MARKER):
-					self.starts[key] += 1
-				self.components[key][value] += 1
-			if self.weighted:
-				self.components = {key: dict(value) for key, value in self.components.items()}
-				self.starts = dict(self.starts)
-			else:
-				self.components = {key: list(value.keys()) for key, value in self.components.items()}
-				self.starts = list(self.starts.keys())
+			self._seed(language)
 		else:
 			raise ValueError("One, and only one of dictionary and language may "
 			"be passed to seed the word generator.")
 
+	def _seed(self, language, vowels=ENGLISH_VOWELS, append=False):
+		"""Seed the generator with a set of words. Takes a language. Don't use
+		this, use :func:`seed`.'
+		:param language: An iterator of words the language to seed the
+		                 generator. Giving English words will produce
+		                 English-like 'words' as output, likewise for other
+		                 languages.
+		:param vowels: A set of the vowels for the input language.
+		:param append: If true, add the given language to the current library -
+		               this can be used to make amalgamation languages. If
+		               false, replaces the current library with the new one.
+		"""
+		if not append:
+			self.components = collections.defaultdict(collections.Counter)
+			self.starts = collections.Counter()
+			
+		self.vowels = vowels
+		self.vowels.add(WordGenerator.MARKER)
+		self.regex = re.compile("([%]+)([^%]+)(?=([%]+))".replace("%", "".join(self.vowels)))
+		
+		for key, value in itertools.chain.from_iterable(self._split_words(language)):
+			if key.startswith(WordGenerator.MARKER):
+				self.starts[key] += 1
+			self.components[key][value] += 1
+			
+		self.components = {key: dict(value) for key, value in self.components.items()}
+		self.starts = dict(self.starts)
+
+	def _split_words(self, words):
+		for word in (item.strip().lower() for item in words if item):
+			yield self.split_word(word)
+			
 	def _weighted_random_choice(self, choices):
 		"""Provides a weighted random choice if the word generator is utilising
 		a weighted library.
@@ -127,7 +142,7 @@ class WordGenerator:
 				if current > pick:
 					return key
 		else:
-			return random.choice(choices)
+			return random.choice(list(choices.keys()))
 
 	def split_word(self, word):
 		"""Split a word into ``(vowels, not_vowels, more_vowels)`` triplets,
@@ -141,9 +156,7 @@ class WordGenerator:
 
 		:param word: The word to split.
 		"""
-		word = WordGenerator.MARKER+word
-		word += WordGenerator.MARKER
-
+		word = WordGenerator.MARKER+word+WordGenerator.MARKER
 		for segment in self.regex.findall(word):
 			key, *value = segment
 			yield key, tuple(value)
@@ -153,7 +166,7 @@ class WordGenerator:
 		instead.
 		"""
 		if not self.components:
-			raise EmptyDictionaryError()
+			raise NotSeededError()
 
 		word = ""
 		current = self._weighted_random_choice(self.starts)
@@ -161,11 +174,9 @@ class WordGenerator:
 			word += current
 			if (current.endswith(WordGenerator.MARKER) and word != WordGenerator.MARKER):
 				break
-			next, current = self._weighted_random_choice(
-				self.components[current])
+			next, current = self._weighted_random_choice(self.components[current])
 			word += next
-		word = word.strip(WordGenerator.MARKER)
-		return word
+		return word.strip(WordGenerator.MARKER)
 
 	def generate_word(self, limit=None):
 		"""Generate a single word.
@@ -210,7 +221,7 @@ class WordGenerator:
 		"""
 		components = {key: list(values.items()) for key, values in self.components.items()}
 		starts = self.starts
-		json.dump({"weighted": self.weighted, "starts": starts, "components": components}, file)
+		json.dump({"starts": starts, "components": components}, file)
 
 	def load(self, file):
 		"""Load the library from a given JSON file.
@@ -220,7 +231,6 @@ class WordGenerator:
 		serialised = json.load(file)
 		self.components = {key: {tuple(value): count for value, count in values} for key, values in serialised["components"].items()}
 		self.starts = serialised["starts"]
-		self.weighted = serialised["weighted"]
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description="A generator for word-like "
@@ -258,7 +268,7 @@ if __name__ == "__main__":
 	parser.add_argument('--version', action='version', version='%(prog)s 1.0')
 	args = parser.parse_args()
 	if args.load:
-		generator = WordGenerator()
+		generator = WordGenerator(weighted=args.weighted)
 		generator.load(args.load)
 	else:
 		generator = WordGenerator(dictionary=args.dictionary, weighted=args.weighted)
