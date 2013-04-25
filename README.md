@@ -5,7 +5,7 @@ language.
 
 ## Requirements:
 
-* [Python 3.x](http://www.python.org/)
+* [Python](http://www.python.org/) - Now works in 2.x and 3.x!
 
 ## Usage:
 

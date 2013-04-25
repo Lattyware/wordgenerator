@@ -4,7 +4,7 @@
 """
 Copyright © 2012: Gareth Latty <gareth@lattyware.co.uk>
 
-	wordgenerator.py
+    wordgenerator.py
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -31,250 +31,265 @@ import sys
 import json
 import itertools
 
+
 class NotSeededError(Exception):
-	def __str__(self):
-		return "Before generating words, the word generator must be seeded " \
-		       "with values from a language."
+    def __str__(self):
+        return "Before generating words, the word generator must be seeded " \
+               "with values from a language."
+
 
 class WordGenerator:
-	"""A generator for word-like strings that follow the 'feel' of a given input
-	language.
-	"""
+    """A generator for word-like strings that follow the 'feel' of a given input
+    language.
+    """
 
-	MARKER = "~"
-	"""This is a marker character used to indicate the beginning or end of a
-	word. It needs to not interfere with regular expressions, or be a character
-	in words you in the language."""
-	ENGLISH_VOWELS = {"a", "e", "i", "o", "u"}
-	"""A set of the vowels for english."""
+    MARKER = "~"
+    """This is a marker character used to indicate the beginning or end of a
+    word. It needs to not interfere with regular expressions, or be a character
+    in words you in the language."""
+    ENGLISH_VOWELS = {"a", "e", "i", "o", "u"}
+    """A set of the vowels for english."""
 
-	def __init__(self, dictionary=None, language=None, weighted=True, vowels=ENGLISH_VOWELS):
-		"""Creates a new, seeded WordGenerator. Provide one of dictionary or
-		language.
+    def __init__(self, dictionary=None, language=None, weighted=True,
+                 vowels=ENGLISH_VOWELS):
+        """Creates a new, seeded WordGenerator. Provide one of dictionary or
+        language.
 
-		:param dictionary: A newline delimited file of words to use as a
-		                   language.
-		:param language: An iterator of words the language to seed the
-		                 generator. Giving English words will produce
-		                 English-like 'words' as output, likewise for other
-		                 languages.
-		:param weighted: If more common segments in the language are more likely
-						 to appear in the output. This will make for more
-						 realistic words, but also often less interesting.
-		:param vowels: A set of the vowels for the input language.
-		"""
-		self.marker = WordGenerator.MARKER
-		self.weighted = weighted
-		if dictionary or language:
-			self.seed(dictionary, language, vowels)
+        :param dictionary: A newline delimited file of words to use as a
+                           language.
+        :param language: An iterator of words the language to seed the
+                         generator. Giving English words will produce
+                         English-like 'words' as output, likewise for other
+                         languages.
+        :param weighted: If more common segments in the language are more likely
+                         to appear in the output. This will make for more
+                         realistic words, but also often less interesting.
+        :param vowels: A set of the vowels for the input language.
+        """
+        self.marker = WordGenerator.MARKER
+        self.weighted = weighted
+        if dictionary or language:
+            self.seed(dictionary, language, vowels)
 
-	def seed(self, dictionary=None, language=None, vowels=ENGLISH_VOWELS, append=False):
-		"""Seed the generator with a set of words. Provide one of dictionary or
-		language.
+    def seed(self, dictionary=None, language=None, vowels=ENGLISH_VOWELS,
+             append=False):
+        """Seed the generator with a set of words. Provide one of dictionary or
+        language.
 
-		:param dictionary: A newline delimited file of words to use as a
-		                   language.
-		:param language: An iterator of words the language to seed the
-		                 generator. Giving English words will produce
-		                 English-like 'words' as output, likewise for other
-		                 languages.
-		:param vowels: A set of the vowels for the input language.
-		:param append: If true, add the given language to the current library -
-		               this can be used to make amalgamation languages. If
-		               false, replaces the current library with the new one.
-		"""
-		if dictionary and not language:
-			try:
-				with open(dictionary, "r") as file:
-					self.seed(language=file)
-			except TypeError:
-				self._seed(language=dictionary)
-		elif language and not dictionary:
-			self._seed(language)
-		else:
-			raise ValueError("One, and only one of dictionary and language may "
-			"be passed to seed the word generator.")
+        :param dictionary: A newline delimited file of words to use as a
+                           language.
+        :param language: An iterator of words the language to seed the
+                         generator. Giving English words will produce
+                         English-like 'words' as output, likewise for other
+                         languages.
+        :param vowels: A set of the vowels for the input language.
+        :param append: If true, add the given language to the current library -
+                       this can be used to make amalgamation languages. If
+                       false, replaces the current library with the new one.
+        """
+        if dictionary and not language:
+            try:
+                with open(dictionary, "r") as file:
+                    self.seed(language=file, vowels=vowels, append=append)
+            except TypeError:
+                self._seed(language=dictionary, vowels=vowels, append=append)
+        elif language and not dictionary:
+            self._seed(language, vowels=vowels, append=append)
+        else:
+            raise ValueError("One, and only one of dictionary and language may "
+                             "be passed to seed the word generator.")
 
-	def _seed(self, language, vowels=ENGLISH_VOWELS, append=False):
-		"""Seed the generator with a set of words. Takes a language. Don't use
-		this, use :func:`seed`.'
-		:param language: An iterator of words the language to seed the
-		                 generator. Giving English words will produce
-		                 English-like 'words' as output, likewise for other
-		                 languages.
-		:param vowels: A set of the vowels for the input language.
-		:param append: If true, add the given language to the current library -
-		               this can be used to make amalgamation languages. If
-		               false, replaces the current library with the new one.
-		"""
-		if not append:
-			self.components = collections.defaultdict(collections.Counter)
-			self.starts = collections.Counter()
-			
-		self.vowels = vowels
-		self.vowels.add(WordGenerator.MARKER)
-		self.regex = re.compile("([%]+)([^%]+)(?=([%]+))".replace("%", "".join(self.vowels)))
-		
-		for key, value in itertools.chain.from_iterable(self._split_words(language)):
-			if key.startswith(WordGenerator.MARKER):
-				self.starts[key] += 1
-			self.components[key][value] += 1
-			
-		self.components = {key: dict(value) for key, value in self.components.items()}
-		self.starts = dict(self.starts)
+    def _seed(self, language, vowels=ENGLISH_VOWELS, append=False):
+        """Seed the generator with a set of words. Takes a language. Don't use
+        this, use :func:`seed`.'
+        :param language: An iterator of words the language to seed the
+                         generator. Giving English words will produce
+                         English-like 'words' as output, likewise for other
+                         languages.
+        :param vowels: A set of the vowels for the input language.
+        :param append: If true, add the given language to the current library -
+                       this can be used to make amalgamation languages. If
+                       false, replaces the current library with the new one.
+        """
+        if not append:
+            self.components = collections.defaultdict(collections.Counter)
+            self.starts = collections.Counter()
 
-	def _split_words(self, words):
-		for word in (item.strip().lower() for item in words if item):
-			yield self.split_word(word)
-			
-	def _weighted_random_choice(self, choices):
-		"""Provides a weighted random choice if the word generator is utilising
-		a weighted library.
+        self.vowels = vowels
+        self.vowels.add(WordGenerator.MARKER)
+        self.regex = re.compile("([%]+)([^%]+)(?=([%]+))".replace(
+            "%", "".join(self.vowels)))
 
-		:param choices: The choices to pick from.
-		"""
-		if self.weighted:
-			max = sum(choices.values())
-			pick = random.uniform(0, max)
-			current = 0
-			for key, value in choices.items():
-				current += value
-				if current > pick:
-					return key
-		else:
-			return random.choice(list(choices.keys()))
+        for key, value in itertools.chain.from_iterable(
+                self._split_words(language)):
+            if key.startswith(WordGenerator.MARKER):
+                self.starts[key] += 1
+            self.components[key][value] += 1
 
-	def split_word(self, word):
-		"""Split a word into ``(vowels, not_vowels, more_vowels)`` triplets,
-		adding :attr:`WordGenerator.MARKER` (which counts as a vowel) where
-		needed to ensure that the word starts and ends with a 'vowel'.
+        self.components = {key: dict(value)
+                           for key, value in self.components.items()}
+        self.starts = dict(self.starts)
 
-		This returns a tuple of length 2, the first set of vowels followed by
-		another tuple of 2 with the not vowels and more vowels.
+    def _split_words(self, words):
+        for word in (item.strip().lower() for item in words if item):
+            yield self.split_word(word)
 
-		E.g: ``(vowels, (not_vowels, more_vowels)``.
+    def _weighted_random_choice(self, choices):
+        """Provides a weighted random choice if the word generator is utilising
+        a weighted library.
 
-		:param word: The word to split.
-		"""
-		word = WordGenerator.MARKER+word+WordGenerator.MARKER
-		for segment in self.regex.findall(word):
-			key, *value = segment
-			yield key, tuple(value)
+        :param choices: The choices to pick from.
+        """
+        if self.weighted:
+            max_ = sum(choices.values())
+            pick = random.uniform(0, max_)
+            current = 0
+            for key, value in choices.items():
+                current += value
+                if current > pick:
+                    return key
+        else:
+            return random.choice(list(choices.keys()))
 
-	def _generate_word(self):
-		"""Generate a single word. Don't use this, use :func:`generate_word()``
-		instead.
-		"""
-		if not self.components:
-			raise NotSeededError()
+    def split_word(self, word):
+        """Split a word into ``(vowels, not_vowels, more_vowels)`` triplets,
+        adding :attr:`WordGenerator.MARKER` (which counts as a vowel) where
+        needed to ensure that the word starts and ends with a 'vowel'.
 
-		word = ""
-		current = self._weighted_random_choice(self.starts)
-		while True:
-			word += current
-			if (current.endswith(WordGenerator.MARKER) and word != WordGenerator.MARKER):
-				break
-			next, current = self._weighted_random_choice(self.components[current])
-			word += next
-		return word.strip(WordGenerator.MARKER)
+        This returns a tuple of length 2, the first set of vowels followed by
+        another tuple of 2 with the not vowels and more vowels.
 
-	def generate_word(self, limit=None):
-		"""Generate a single word.
+        E.g: ``(vowels, (not_vowels, more_vowels)``.
 
-		:param limit: Either a maximum length, or a tuple of ``(minimum,
-		              maximum)``. Minimum is an absolute (no produced word will
-		              be below the minimum), while maximum is a rough stopping
-		              point (words may be longer).
-		"""
-		return next(self.generate(limit))
+        :param word: The word to split.
+        """
+        word = WordGenerator.MARKER+word+WordGenerator.MARKER
+        for segment in self.regex.findall(word):
+            segment = iter(segment)
+            key = next(segment)
+            yield key, tuple(segment)
 
-	def generate(self, limit, n=None):
-		"""Generate random words.
+    def _generate_word(self):
+        """Generate a single word. Don't use this, use :func:`generate_word()``
+        instead.
+        """
+        if not self.components:
+            raise NotSeededError()
 
-		If you don't want your words limited, just iterate over the generator.
-		If you want to limit your production, see itertools.islice.
+        word = ""
+        current = self._weighted_random_choice(self.starts)
+        while True:
+            word += current
+            if (current.endswith(WordGenerator.MARKER)
+                    and word != WordGenerator.MARKER):
+                break
+            next_, current = self._weighted_random_choice(
+                self.components[current])
+            word += next_
+        return word.strip(WordGenerator.MARKER)
 
-		:param limit: Either a maximum length, or a tuple of ``(minimum,
-		              maximum)``. Minimum is an absolute (no produced word will
-		              be below the minimum), while maximum is a rough stopping
-		              point (words may be longer).
-		:param n: Produce n words, if ``None``, then produce infinitely.
-		"""
-		try:
-			minimum, maximum = limit
-		except TypeError:
-			minimum = 0
-			maximum = limit
-		return itertools.islice((item for item in self if minimum < len(item) < maximum), n)
+    def generate_word(self, limit=None):
+        """Generate a single word.
 
-	def __iter__(self):
-		"""Yields a random words."""
-		while True:
-			yield self._generate_word()
+        :param limit: Either a maximum length, or a tuple of ``(minimum,
+                      maximum)``. Minimum is an absolute (no produced word will
+                      be below the minimum), while maximum is a rough stopping
+                      point (words may be longer).
+        """
+        return next(self.generate(limit))
 
-	def save(self, file):
-		"""Save the library created from the seeds as JSON to the given file.
-		This allows you to pre-process dictionaries and store the data in a
-		simply compressed format, allowing quicker generation.
+    def generate(self, limit, n=None):
+        """Generate random words.
 
-		:param file: The file to save to.
-		"""
-		components = {key: list(values.items()) for key, values in self.components.items()}
-		starts = self.starts
-		json.dump({"starts": starts, "components": components}, file)
+        If you don't want your words limited, just iterate over the generator.
+        If you want to limit your production, see itertools.islice().
 
-	def load(self, file):
-		"""Load the library from a given JSON file.
+        :param limit: Either a maximum length, or a tuple of ``(minimum,
+                      maximum)``. Minimum is an absolute (no produced word will
+                      be below the minimum), while maximum is a rough stopping
+                      point (words may be longer).
+        :param n: Produce n words, if ``None``, then produce infinitely.
+        """
+        try:
+            minimum, maximum = limit
+        except TypeError:
+            minimum = 0
+            maximum = limit
+        return itertools.islice((item for item in self
+                                 if minimum < len(item) < maximum), n)
 
-		:param file: The file to load from.
-		"""
-		serialised = json.load(file)
-		self.components = {key: {tuple(value): count for value, count in values} for key, values in serialised["components"].items()}
-		self.starts = serialised["starts"]
+    def __iter__(self):
+        """Yields a random words."""
+        while True:
+            yield self._generate_word()
+
+    def save(self, file):
+        """Save the library created from the seeds as JSON to the given file.
+        This allows you to pre-process dictionaries and store the data in a
+        simply compressed format, allowing quicker generation.
+
+        :param file: The file to save to.
+        """
+        components = {key: list(values.items())
+                      for key, values in self.components.items()}
+        starts = self.starts
+        json.dump({"starts": starts, "components": components}, file)
+
+    def load(self, file):
+        """Load the library from a given JSON file.
+
+        :param file: The file to load from.
+        """
+        serialised = json.load(file)
+        self.components = {key: {tuple(value): count for value, count in values}
+                           for key, values in serialised["components"].items()}
+        self.starts = serialised["starts"]
 
 if __name__ == "__main__":
-	parser = argparse.ArgumentParser(description="A generator for word-like "
-	         "strings that follow the 'feel' of a given input language.")
-	parser.add_argument("dictionary", type=argparse.FileType('r'),
-	                    default=sys.stdin, nargs="?", metavar="FILE",
-	                    help="The path to a dictionary file for a language - a "
-	                         "list of newline separated words. "
-	                         "(default: read from standard input)")
-	parser.add_argument("-w", "--weighted", type=bool, default=True,
-	                    metavar="BOOL",
-	                    help="If true, a common segment in the language is"
-	                         "more likely to show up in an output word. "
-	                         "(default: %(default)s)")
-	parser.add_argument("-n", "--number", type=int, default=1, metavar="N",
-	                    help="The number of words to generate. "
-	                         "(default: %(default)s)")
-	parser.add_argument("--min", type=int, default=0, metavar="N",
-	                    help="The minimum length of words to generate. "
-	                         "(default: %(default)s)")
-	parser.add_argument("-m", "--max", type=int, default=14, metavar="N",
-	                    help="The rough maximum length of words to generate. "
-	                         "(default: %(default)s)")
-	parser.add_argument("-s", "--save", type=argparse.FileType('w'),
-	                    metavar="FILE",
-	                    help="Save the library to disc as JSON data. When "
-	                         "saving, other operations will be ignored.")
-	parser.add_argument("-o", "--output", action="store_const",
-	                    const=sys.stdout, dest="save",
-	                    help="Save the library, sending output to the standard "
-	                         "output.")
-	parser.add_argument("-l", "--load", type=argparse.FileType('r'),
-	                    metavar="FILE",
-	                    help="Load the library from JSON data on disc.")
-	parser.add_argument('--version', action='version', version='%(prog)s 1.0')
-	args = parser.parse_args()
-	if args.load:
-		generator = WordGenerator(weighted=args.weighted)
-		generator.load(args.load)
-	else:
-		generator = WordGenerator(dictionary=args.dictionary, weighted=args.weighted)
-	if args.save:
-		generator.save(args.save)
-	else:
-		for word in generator.generate((args.min, args.max), args.number):
-			print(word)
-
+    parser = argparse.ArgumentParser(description="A generator for word-like "
+                                                 "strings that follow the "
+                                                 "'feel' of a given input "
+                                                 "language.")
+    parser.add_argument("dictionary", type=argparse.FileType('r'),
+                        default=sys.stdin, nargs="?", metavar="FILE",
+                        help="The path to a dictionary file for a language - a "
+                             "list of newline separated words. "
+                             "(default: read from standard input)")
+    parser.add_argument("-w", "--weighted", type=bool, default=True,
+                        metavar="BOOL",
+                        help="If true, a common segment in the language is"
+                             "more likely to show up in an output word. "
+                             "(default: %(default)s)")
+    parser.add_argument("-n", "--number", type=int, default=1, metavar="N",
+                        help="The number of words to generate. "
+                             "(default: %(default)s)")
+    parser.add_argument("--min", type=int, default=0, metavar="N",
+                        help="The minimum length of words to generate. "
+                             "(default: %(default)s)")
+    parser.add_argument("-m", "--max", type=int, default=14, metavar="N",
+                        help="The rough maximum length of words to generate. "
+                             "(default: %(default)s)")
+    parser.add_argument("-s", "--save", type=argparse.FileType('w'),
+                        metavar="FILE",
+                        help="Save the library to disc as JSON data. When "
+                             "saving, other operations will be ignored.")
+    parser.add_argument("-o", "--output", action="store_const",
+                        const=sys.stdout, dest="save",
+                        help="Save the library, sending output to the standard "
+                             "output.")
+    parser.add_argument("-l", "--load", type=argparse.FileType('r'),
+                        metavar="FILE",
+                        help="Load the library from JSON data on disc.")
+    parser.add_argument('--version', action='version', version='%(prog)s 1.0')
+    args = parser.parse_args()
+    if args.load:
+        generator = WordGenerator(weighted=args.weighted)
+        generator.load(args.load)
+    else:
+        generator = WordGenerator(dictionary=args.dictionary,
+                                  weighted=args.weighted)
+    if args.save:
+        generator.save(args.save)
+    else:
+        for word in generator.generate((args.min, args.max), args.number):
+            print(word)
