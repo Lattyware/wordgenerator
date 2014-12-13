@@ -1,4 +1,4 @@
-# wordgenerator.py v1.0
+# wordgenerator.py v1.2.0
 
 A generator for word-like strings that follow the 'feel' of a given input
 language.
